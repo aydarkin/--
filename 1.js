@@ -3,7 +3,7 @@
 /**
  * Критические значения хи квадрат 
  * при alpha = 0.05
- * для числа степеней свободы от 1 до 10
+ * для числа степеней свободы от 1 до 20
  */ 
 const chi2Criticals = [
     3.8,
@@ -11,12 +11,22 @@ const chi2Criticals = [
     7.8,
     9.5,
     11.1,
-
     12.6,
     14.1,
     15.5,
     16.9,
     18.3,
+
+    19.7,
+    21,
+    22.4,
+    23.7,
+    25,
+    26.3,
+    27.6,
+    28.9,
+    30.1,
+    31.4
 ]
 
 /**
@@ -31,27 +41,21 @@ function uniform(min, max) {
 
 /**
  * Получить значение согласно дискретному равномерному распределению [min, max]
- * @param {number} min
- * @param {number} max 
+ * @param {number} lambda - параметр интенсивности
  */
-function uniformDiscrete(min, max) {
-    // задаем ближайшие целые значения внутри интервала
-    if (!Number.isInteger) {
-        min = Math.trunc(min) + 1
-    }
-    max = Math.trunc(max)
-
-    const edgesCount = max - min + 1; // значений всего
-    const segment = 1 / edgesCount // длина отрезка
-
-    const edges = []
-    for (let i = 0; i < edgesCount; i++) {
-        edges[i] = (i+1) * segment
-    }
-
+function poisson(lambda) {
     const u = Math.random()
-    const numberSegment = edges.findIndex((value) => u <= value);
-    return min + numberSegment
+    let p = Math.exp(-lambda)
+
+    let f = p
+    let i = 0
+    while (!(u < f)) {
+        p = lambda * p / (i+1)
+        f += + p
+        i += 1
+    }
+
+    return i
 }
 
 /**
@@ -66,17 +70,17 @@ function uniformDiscrete(min, max) {
  * @param {number} N - объем выборки
  */
 function checkUniform(result, N) {
-    const groups = Object.keys(result).map((key) => +key) 
-    const xCenters = groups.map((begin) => +begin + 0.5) // т.к. интервал [i, i+1], то центр i + 0.5
+    const intervals = Object.keys(result).map((key) => +key) 
+    const xCenters = intervals.map((begin) => +begin + 0.5) // т.к. интервал [i, i+1], то центр i + 0.5
 
     // Выборочное среднее
-    const mean = 1 / N * groups.reduce((acc, xi, index) => {
+    const mean = 1 / N * intervals.reduce((acc, xi, index) => {
         const ni = result[xi].count
         return acc + (xCenters[index] * ni)
     }, 0)
 
     // Дисперсия
-    const variable = 1 / N * groups.reduce((acc, xi, index) => {
+    const variable = 1 / N * intervals.reduce((acc, xi, index) => {
         const ni = result[xi].count
         return acc + (ni * ((xCenters[index] - mean)**2))
     }, 0)
@@ -92,22 +96,22 @@ function checkUniform(result, N) {
     const density = 1 / (b$ - a$)
     
     // разбитие, число значений
-    const s = groups.length
+    const s = intervals.length
 
     // теоритические частоты
-    result[groups[0]].theory = N * density * (groups[1] - a$)
+    result[intervals[0]].theory = N * density * (intervals[1] - a$)
     if (s > 2) {
         for (let i = 1; i < s-1; i++) {
-            result[groups[i]].theory = N * density * (groups[i] - groups[i-1])
+            result[intervals[i]].theory = N * density * (intervals[i] - intervals[i-1])
         }
     }
-    result[groups[s-1]].theory = N * density * (b$ - groups[s-1])
+    result[intervals[s-1]].theory = N * density * (b$ - intervals[s-1])
 
     // число степеней свободы k = s - 3
     const k = s - 3
 
     // критерий согласия Пирсона (хи квадрат)
-    const chi2 = groups.reduce((acc, xi) => {
+    const chi2 = intervals.reduce((acc, xi) => {
         const ni = result[xi].count
         const niTheory = result[xi].theory
         return acc + ((ni - niTheory)**2 / niTheory)
@@ -128,32 +132,57 @@ function checkUniform(result, N) {
     console.log(`Хи2 наблюдаемое ${chi2 < chi2Critical ? '<' : '>='} Хи2 критическое => исследуемая случайная переменная ${chi2 < chi2Critical ? '' : 'не '}принадлежит закону распределения`)
 }
 
+function factorial(n) {
+    if (n < 2) {
+        return 1
+    }
+
+    let result = 1
+    for (let i = 1; i <= n; i++) {
+        result *= i
+    }
+    return result
+}
+
 /**
  * Проверка дискретного равномерного распределения
  * @param {Record<number, IResultItem>} result - Результат выборки сгруппированный в единичные интервалы. 10 => интервал [10, 11)
  * @param {number} N - объем выборки
  */
-function checkUniformDiscrete(result, N) {
-    const values = Object.keys(result)
+function checkPoisson(result, N) {
+    const values = Object.keys(result).map((str) => +str)
     // разбитие, число значений
     const s = values.length
 
-    // число степеней свободы k = s - 3
-    const k = s - 3
+    // выборочное среднее
+    const mean = 1 / N * values.reduce((acc, xi) => {
+        const ni = result[xi].count
+        return acc + (+xi * ni)
+    }, 0)
 
-    // ожидаемая частота
-    const expectedN = N / s
+    const expectedLambda = mean
 
+    values.forEach((value) => {
+        const fact = factorial(value)
+        const pi = Math.exp(-expectedLambda) * (expectedLambda**value) / fact
+        result[value].theory = pi * N
+    })
+    
     // критерий согласия Пирсона (хи квадрат)
     const chi2 = values.reduce((acc, xi) => {
         const ni = result[xi].count
-        return acc + ((ni - expectedN)**2 / expectedN)
+        const niTheory = result[xi].theory
+        return acc + ((ni - niTheory)**2 / niTheory)
     }, 0)
 
-    const chi2Critical = chi2Criticals[k-1]
+    // степени свободы
+    const k = s - 2
 
+    // хи квадрат критическое при заданном k
+    const chi2Critical = chi2Criticals[k-1]
     console.table(result)
-    console.log(`Ожидаемая частота ni = ${expectedN}`)
+
+    console.log(`lamda теоретическая = ${expectedLambda}`)
     console.log(`Степень свободы k = ${k}`)
     console.log(`Уровень значимости alpha = 0.05`)
 
@@ -167,12 +196,12 @@ function main() {
     const a = 2
     const b = 14
 
-    console.log('Равномерное непрерывное распределение:')
     const result1 = {}
     for (let i = 0; i < (b-a); i++) {
         result1[a+i] = { count: 0 }
     }
-    const N1 = 100000
+    const N1 = 200
+    console.log(`Равномерное непрерывное распределение (опытов ${N1}):`)
     for (let index = 0; index < N1; index++) {
         const x = Math.trunc(uniform(a,b))
         result1[x].count += 1
@@ -182,17 +211,22 @@ function main() {
 
     console.log()
 
-    console.log('Равномерное дискретное распределение:')
+    
     const result2 = {}
-    for (let i = 0; i < (b-a+1); i++) {
-        result2[a+i] = { count: 0 }
-    }
-    const N2 = 100000
+    const N2 = 20000
+    const lambda = 5
+    console.log(`Пуассоновское распределение (lambda = ${lambda}, опытов ${N2}):`)
     for (let index = 0; index < N2; index++) {
-        const x = uniformDiscrete(a,b)
-        result2[x].count += 1
+        const x = poisson(lambda)
+        
+        if (result2[x]) {
+            result2[x].count += 1
+        } else {
+            result2[x] = { count: 1 }
+        }
+        
     }
     // @ts-ignore
-    checkUniformDiscrete(result2, N2)
+    checkPoisson(result2, N2)
 }
 main()
