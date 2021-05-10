@@ -48,14 +48,14 @@ function poisson(lambda) {
     let p = Math.exp(-lambda)
 
     let f = p
-    let i = 0
+    let x = 0
     while (!(u < f)) {
-        p = lambda * p / (i+1)
-        f += + p
-        i += 1
+        p = lambda * p / (x+1)
+        f += p
+        x += 1
     }
 
-    return i
+    return x
 }
 
 /**
@@ -102,7 +102,7 @@ function checkUniform(result, N) {
     result[intervals[0]].theory = N * density * (intervals[1] - a$)
     if (s > 2) {
         for (let i = 1; i < s-1; i++) {
-            result[intervals[i]].theory = N * density * (intervals[i] - intervals[i-1])
+            result[intervals[i]].theory = N * density * 1 // 1 взят за ширину
         }
     }
     result[intervals[s-1]].theory = N * density * (b$ - intervals[s-1])
@@ -193,8 +193,8 @@ function checkPoisson(result, N) {
 
 /* Начало */
 function main() {
-    const a = 2
-    const b = 14
+    const a = 1
+    const b = 7
 
     const result1 = {}
     for (let i = 0; i < (b-a); i++) {
